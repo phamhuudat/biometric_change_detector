@@ -1,0 +1,24 @@
+#!/bin/sh
+# Install: ln -s ../../tool/hooks/pre-commit .git/hooks/pre-commit
+# .sensitive-patterns (gitignored) lists private terms that must never be committed.
+set -e
+
+if [ ! -f .sensitive-patterns ]; then
+  echo "pre-commit: .sensitive-patterns is missing, create it before committing" >&2
+  exit 1
+fi
+
+files=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$files" ] && echo "$files" | xargs grep -nIiE -f .sensitive-patterns -- 2>/dev/null; then
+  echo "pre-commit: sensitive terms found in staged files, aborting" >&2
+  exit 1
+fi
+
+# Xcode writes the signing team when running on a real device.
+if git diff --cached --name-only | grep -q 'project.pbxproj$' &&
+  git diff --cached -- '*.pbxproj' | grep -E '^\+.*DEVELOPMENT_TEAM'; then
+  echo "pre-commit: DEVELOPMENT_TEAM must not be committed, remove it from project.pbxproj" >&2
+  exit 1
+fi
+
+dart format --output=none --set-exit-if-changed lib test example/lib
